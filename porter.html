@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tarjetas de Estudio: Estrategia de Porter</title>
+    <!-- Carga de Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuración de fuentes y colores personalizados -->
+    <style>
+        :root {
+            --color-primary: #1e3a8a; /* Blue-900 */
+            --color-secondary: #3b82f6; /* Blue-500 */
+            --color-success: #10b981; /* Emerald-500 */
+            --color-error: #ef4444; /* Red-500 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .card-container {
+            min-height: 400px;
+            perspective: 1000px;
+        }
+        .flashcard {
+            transition: transform 0.6s ease;
+            transform-style: preserve-3d;
+            height: 100%;
+            width: 100%;
+        }
+        .flashcard.flipped {
+            transform: rotateY(180deg);
+        }
+        .card-face {
+            backface-visibility: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .front {
+            background: white;
+            z-index: 2;
+        }
+        .back {
+            background: var(--color-primary);
+            color: white;
+            transform: rotateY(180deg);
+        }
+        .btn-option {
+            transition: background-color 0.15s, transform 0.1s;
+        }
+        .btn-option:hover {
+            transform: translateY(-1px);
+        }
+        .btn-option.correct {
+            background-color: var(--color-success) !important;
+            color: white;
+            border: none;
+        }
+        .btn-option.incorrect {
+            background-color: var(--color-error) !important;
+            color: white;
+            border: none;
+            opacity: 0.6;
+        }
+        .btn-option:disabled {
+            cursor: default;
+        }
+
+        /* Estilos específicos para móvil */
+        @media (max-width: 768px) {
+            .card-container {
+                min-height: 500px;
+            }
+            .max-w-xl {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-xl mx-auto">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">
+            Estrategia de Porter: Tarjetas de Estudio
+        </h1>
+
+        <!-- Contadores de Ciclo y Progreso -->
+        <div class="flex justify-between items-center mb-4 text-sm font-semibold text-gray-600">
+            <span id="cycle-display" class="bg-blue-100 text-blue-800 py-1 px-3 rounded-full">Ciclo 1: Fundamentos</span>
+            <span id="progress-display" class="text-gray-700">Progreso: 0/75</span>
+        </div>
+
+        <!-- Contenedor de la Tarjeta Interactiva -->
+        <div class="card-container relative w-full mb-6">
+            <div id="flashcard" class="flashcard">
+                
+                <!-- CARA FRONTAL (Pregunta y Opciones) -->
+                <div class="card-face front">
+                    <div class="flex-grow">
+                        <p id="question-text" class="text-lg font-semibold text-gray-900 mb-6">Cargando pregunta...</p>
+                        <div id="options-container" class="space-y-3">
+                            <!-- Opciones se insertan aquí por JS -->
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+                        <button id="show-answer-btn" onclick="checkAnswer()" disabled class="bg-gray-400 text-white py-2 px-6 rounded-xl font-medium shadow-md transition duration-200">
+                            Comprobar Respuesta
+                        </button>
+                        <span id="feedback-message" class="text-base font-semibold"></span>
+                    </div>
+                </div>
+
+                <!-- CARA POSTERIOR (Respuesta y Justificación) -->
+                <div class="card-face back">
+                    <div class="flex-grow overflow-y-auto">
+                        <h2 class="text-xl font-bold mb-3">Respuesta y Justificación</h2>
+                        <p id="correct-answer-display" class="text-lg font-semibold mb-4 bg-white/10 p-2 rounded-lg"></p>
+                        <p id="justification-display" class="text-sm leading-relaxed"></p>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/30 flex justify-end">
+                        <button id="next-card-btn" onclick="nextCard()" class="bg-white text-blue-800 py-2 px-6 rounded-xl font-bold shadow-lg transition duration-200 hover:bg-gray-100">
+                            Siguiente Tarjeta
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // Variables Globales
+    let currentQuestionIndex = 0;
+    let selectedOption = null;
+    let quizData = [];
+    const questionsPerCycle = 15;
+    const totalQuestions = 75;
+
+    // --- Definición de las 75 Preguntas (Basado en Spaced Repetition) ---
+    const allQuestions = [
+        // CICLO 1: FUNDAMENTOS Y DISTINCIÓN ESTRATÉGICA (EO vs. Estrategia) - Q1-15
+        {
+            q: "¿Cuál es la diferencia fundamental entre Eficacia Operacional (EO) y Estrategia?",
+            options: [
+                "a) La EO se enfoca en la reducción de costos, la Estrategia en la maximización de ingresos.",
+                "b) La EO consiste en hacer lo mismo mejor que los rivales, la Estrategia en hacer cosas diferentes o de manera diferente.",
+                "c) La EO busca la ventaja competitiva sostenible, la Estrategia busca la ventaja a corto plazo.",
+                "d) La EO es para empresas manufactureras, la Estrategia para empresas de servicios."
+            ],
+            correctIndex: 1,
+            justification: "La EO (Eficacia Operacional) implica alcanzar y superar las mejores prácticas (benchmarking), mientras que la Estrategia es elegir una posición única, realizando actividades distintas o realizando las mismas actividades de forma diferente a los rivales."
+        },
+        {
+            q: "¿Cuál es el resultado inevitable de basar la competencia únicamente en la Eficacia Operacional (EO) a largo plazo?",
+            options: [
+                "a) La creación de monopolios.",
+                "b) Una mayor rentabilidad para toda la industria.",
+                "c) La convergencia competitiva y una rentabilidad decreciente (carrera hacia el fondo).",
+                "d) Un posicionamiento estratégico basado en la necesidad."
+            ],
+            correctIndex: 2,
+            justification: "La EO es fácilmente imitable; a medida que los rivales copian las mejores prácticas, las diferencias se eliminan, lo que lleva a la convergencia y a una competencia de precios (cero-sum)."
+        },
+        {
+            q: "¿Qué modelo estratégico promueve la ventaja competitiva sustentable según Porter?",
+            options: [
+                "a) Flexibilidad y respuestas rápidas frente a todos los cambios competitivos.",
+                "b) Lograr la mejor práctica en todas las actividades.",
+                "c) Una posición competitiva única, actividades adaptadas a la estrategia, claros trade-offs y un calce de todas las actividades.",
+                "d) Descansar las ventajas en unas pocas competencias centrales."
+            ],
+            correctIndex: 2,
+            justification: "La visión de Porter para la ventaja competitiva sustentable se basa en una posición única, elecciones claras (trade-offs) y la sustentabilidad proveniente del sistema de actividades (calce)."
+        },
+        {
+            q: "La actividad de benchmarking continuo para adoptar las mejores prácticas se relaciona directamente con:",
+            options: [
+                "a) El Posicionamiento basado en la Variedad.",
+                "b) La Eficacia Operacional (EO).",
+                "c) El Calce de Tercer Orden.",
+                "d) La Creación de trade-offs."
+            ],
+            correctIndex: 1,
+            justification: "El benchmarking es el método central de la Eficacia Operacional, que busca continuamente igualar o superar el desempeño de los rivales en actividades similares."
+        },
+        {
+            q: "¿Cuál es el verdadero rol de la Eficacia Operacional (EO)?",
+            options: [
+                "a) Es el motor de la Estrategia.",
+                "b) Es una condición necesaria, pero no suficiente, para el éxito estratégico.",
+                "c) Es lo mismo que la Estrategia.",
+                "d) Debe ser sacrificada en favor de los trade-offs."
+            ],
+            correctIndex: 1,
+            justification: "Toda empresa debe tener una buena EO, pero por sí sola no genera una ventaja sostenible a largo plazo debido a la convergencia."
+        },
+        {
+            q: "¿En qué se enfoca el pensamiento estratégico según Porter, a diferencia del pensamiento de EO?",
+            options: [
+                "a) Reducir los costos fijos.",
+                "b) Crear una posición competitiva única.",
+                "c) Aumentar la rotación de inventario.",
+                "d) Mejorar la calidad del producto."
+            ],
+            correctIndex: 1,
+            justification: "La estrategia consiste en elegir ser diferente: crear una posición única y valiosa, no solo ser mejor."
+        },
+        {
+            q: "¿Qué riesgo surge cuando una empresa intenta ser 'todo para todos' sin hacer elecciones estratégicas claras?",
+            options: [
+                "a) El riesgo de estancamiento.",
+                "b) El riesgo de la divergencia competitiva.",
+                "c) El riesgo de la 'muerte en medio' (ser ineficaz y sin posición única).",
+                "d) El riesgo de un Calce de Tercer Orden demasiado complejo."
+            ],
+            correctIndex: 2,
+            justification: "Al evitar los trade-offs y no elegir una posición única, la empresa diluye sus recursos y no logra ni un bajo costo ni una alta diferenciación efectiva."
+        },
+        {
+            q: "¿Qué característica de la competencia surge cuando la EO sustituye a la Estrategia?",
+            options: [
+                "a) La innovación disruptiva.",
+                "b) La guerra de precios.",
+                "c) La expansión del mercado.",
+                "d) La diversificación de productos."
+            ],
+            correctIndex: 1,
+            justification: "Cuando no hay diferencias estratégicas, la única forma de competir es a través del precio, lo que resulta en una competencia destructiva."
+        },
+        {
+            q: "¿Cuál es la principal ventaja de una posición competitiva única sobre la simple Eficacia Operacional?",
+            options: [
+                "a) Permite a la empresa ser más flexible.",
+                "b) Permite a la empresa cobrar precios más altos sin ser imitada.",
+                "c) La ventaja se vuelve más difícil de imitar debido a las elecciones y actividades interconectadas.",
+                "d) Elimina la necesidad de innovación."
+            ],
+            correctIndex: 2,
+            justification: "La ventaja de la posición estratégica es que está anclada en un sistema de actividades complejo y único, no en una sola práctica imitable."
+        },
+        {
+            q: "La Eficacia Operacional se logra eliminando o reduciendo los inputs desperdiciados. ¿A qué se refiere este enfoque?",
+            options: [
+                "a) Hacer sacrificios por la estrategia.",
+                "b) Mejorar continuamente la forma de hacer las actividades.",
+                "c) Elegir un segmento de mercado.",
+                "d) Crear un sistema de Calce de Tercer Orden."
+            ],
+            correctIndex: 1,
+            justification: "La EO se enfoca en la eficiencia: cómo producir, distribuir y vender una actividad mejor que los rivales."
+        },
+        {
+            q: "Una empresa que se enfoca en la mejora continua de la calidad y la velocidad de entrega en todos sus procesos está priorizando:",
+            options: [
+                "a) La Estrategia basada en la Variedad.",
+                "b) La Estrategia.",
+                "c) La Eficacia Operacional.",
+                "d) El Posicionamiento basado en el Acceso."
+            ],
+            correctIndex: 2,
+            justification: "La mejora continua de actividades ya existentes (calidad, velocidad) es la esencia de la Eficacia Operacional."
+        },
+        {
+            q: "¿Cuál de los siguientes NO es un componente clave de la Estrategia según Porter?",
+            options: [
+                "a) Una posición única y valiosa.",
+                "b) Trade-offs claros.",
+                "c) El Calce del sistema de actividades.",
+                "d) La Flexibilidad total."
+            ],
+            correctIndex: 3,
+            justification: "La estrategia requiere hacer elecciones y trade-offs, lo cual es lo opuesto a la flexibilidad total o la capacidad de responder a cada necesidad competitiva."
+        },
+        {
+            q: "¿Cuál de las siguientes afirmaciones describe mejor el dilema de la convergencia competitiva?",
+            options: [
+                "a) Todos los competidores persiguen el mismo cliente.",
+                "b) Todos los competidores están adoptando las mismas mejores prácticas de EO.",
+                "c) Todos los competidores están eligiendo un posicionamiento basado en la Necesidad.",
+                "d) Todos los competidores tienen un Calce de Primer Orden."
+            ],
+            correctIndex: 1,
+            justification: "La convergencia ocurre porque los rivales se imitan las mejores prácticas de EO, haciendo que sus actividades y costos se parezcan."
+        },
+        {
+            q: "Para Porter, la sustentabilidad de la ventaja competitiva proviene de:",
+            options: [
+                "a) Tener una marca superior y más publicidad.",
+                "b) El sistema de actividades de la empresa.",
+                "c) Una tecnología propietaria.",
+                "d) Ser el primero en moverse."
+            ],
+            correctIndex: 1,
+            justification: "La Estrategia se construye sobre un sistema complejo de actividades interconectadas (el Calce), no sobre una sola ventaja aislada."
+        },
+        {
+            q: "Un director que constantemente realiza reingeniería de procesos y adopta el total quality management está principalmente enfocado en:",
+            options: [
+                "a) La Estrategia.",
+                "b) La Eficacia Operacional.",
+                "c) Los Trade-offs.",
+                "d) El Posicionamiento."
+            ],
+            correctIndex: 1,
+            justification: "Ambos, la reingeniería de procesos y el TQM, son herramientas que buscan optimizar la ejecución de las actividades, lo cual es el núcleo de la Eficacia Operacional."
+        },
+
+        // CICLO 2: POSICIONAMIENTO ESTRATÉGICO (Variedad, Necesidad, Acceso) - Q16-30
+        {
+            q: "¿Cuáles son los tres tipos de posicionamiento estratégico que describe Porter?",
+            options: [
+                "a) Costo, Diferenciación y Enfoque.",
+                "b) Producto, Servicio y Experiencia.",
+                "c) Basado en la Variedad, Basado en la Necesidad y Basado en el Acceso.",
+                "d) Liderazgo, Desafío y Nicho."
+            ],
+            correctIndex: 2,
+            justification: "Porter identifica tres fuentes distintas de posiciones estratégicas: variedad, necesidad y acceso."
+        },
+        {
+            q: "Una estrategia de Posicionamiento Basado en la Variedad se enfoca en:",
+            options: [
+                "a) Atender todas las necesidades de un grupo específico de clientes.",
+                "b) Ofrecer una gran cantidad de productos y servicios.",
+                "c) Producir una variedad de productos o servicios que elija.",
+                "d) Segmentar a clientes que son accesibles de diferentes maneras."
+            ],
+            correctIndex: 2,
+            justification: "Este posicionamiento se basa en la elección del producto o servicio, no en el cliente. Su foco está en el producto (ej. Jiffy Lube, que solo ofrece cambios de aceite)."
+        },
+        {
+            q: "¿Qué tipo de posicionamiento sirve a todas o casi todas las necesidades de un grupo particular de clientes?",
+            options: [
+                "a) Posicionamiento Basado en el Acceso.",
+                "b) Posicionamiento Basado en la Necesidad.",
+                "c) Posicionamiento Basado en la Variedad.",
+                "d) Posicionamiento de Liderazgo en Costos."
+            ],
+            correctIndex: 1,
+            justification: "El Posicionamiento Basado en la Necesidad se centra en el cliente y busca ser la solución completa para ese segmento (ej. Bessemer Trust y clientes con gran patrimonio)."
+        },
+        {
+            q: "Si una empresa utiliza una estrategia de Posicionamiento Basado en el Acceso, la configuración de sus actividades probablemente variará en términos de:",
+            options: [
+                "a) La variedad de productos ofrecidos.",
+                "b) Los trade-offs en la imagen y reputación.",
+                "c) Marketing, procesamiento de pedidos, logística y servicio posventa.",
+                "d) La inversión en benchmarking."
+            ],
+            correctIndex: 2,
+            justification: "El acceso (ej. clientes pequeños vs. grandes, rurales vs. urbanos) dicta cómo se configuran las actividades de marketing, logística y servicio para llegar a ese grupo de la mejor manera."
+        },
+        {
+            q: "El ejemplo de Jiffy Lube, que ofrece exclusivamente cambios de aceite y lubricación (una variedad de servicio) y no reparaciones complejas, es un ejemplo de:",
+            options: [
+                "a) Posicionamiento Basado en la Necesidad.",
+                "b) Posicionamiento Basado en la Variedad.",
+                "c) Posicionamiento Basado en el Acceso.",
+                "d) Posicionamiento Dual."
+            ],
+            correctIndex: 1,
+            justification: "Jiffy Lube eligió una variedad específica de servicio (cambio de aceite) y configuró sus actividades solo para esa necesidad, sin intentar satisfacer otras (reparaciones complejas)."
+        },
+        {
+            q: "¿Qué tipo de posicionamiento justifica los trade-offs en las actividades de distribución, instalación y servicio (ej. ubicación, tamaño de los vendedores)?",
+            options: [
+                "a) Basado en el Acceso.",
+                "b) Basado en la Necesidad.",
+                "c) Basado en la Variedad.",
+                "d) Basado en el Calce."
+            ],
+            correctIndex: 0,
+            justification: "El Posicionamiento Basado en el Acceso surge cuando la forma de acercarse al cliente (geografía, volumen) requiere diferentes configuraciones de actividades."
+        },
+        {
+            q: "¿Cuál de los siguientes escenarios es una característica distintiva del Posicionamiento Basado en la Necesidad?",
+            options: [
+                "a) El cliente debe estar disponible geográficamente.",
+                "b) Las actividades necesarias para servir a este grupo de clientes difieren de las actividades necesarias para otros grupos.",
+                "c) Solo se ofrecen productos altamente innovadores.",
+                "d) Se atiende a clientes con grandes volúmenes de compra."
+            ],
+            correctIndex: 1,
+            justification: "El Posicionamiento Basado en la Necesidad requiere un sistema de actividades totalmente adaptado a las necesidades únicas del grupo de clientes seleccionado."
+        },
+        {
+            q: "El Posicionamiento Basado en la Variedad es a menudo posible cuando:",
+            options: [
+                "a) El mercado geográfico es grande y uniforme.",
+                "b) Las diferencias en las necesidades de los clientes son pequeñas.",
+                "c) La empresa puede servir a una amplia gama de clientes, pero solo satisfaciendo un subconjunto específico de sus necesidades.",
+                "d) La logística es el factor más importante para la diferenciación."
+            ],
+            correctIndex: 2,
+            justification: "Este posicionamiento permite servir a muchos clientes, pero con una oferta limitada de productos o servicios (la 'variedad' elegida), como Jiffy Lube."
+        },
+        {
+            q: "¿Qué tipo de posicionamiento es más probable que dicte la necesidad de una fuerza de ventas local y descentralizada?",
+            options: [
+                "a) Posicionamiento Basado en la Variedad.",
+                "b) Posicionamiento Basado en la Necesidad.",
+                "c) Posicionamiento Basado en el Acceso.",
+                "d) Posicionamiento Basado en el Costo."
+            ],
+            correctIndex: 2,
+            justification: "Las diferencias en la geografía o escala del cliente (acceso) a menudo requieren diferentes configuraciones de logística, distribución y, por lo tanto, fuerza de ventas."
+        },
+        {
+            q: "¿Qué implicación tiene un Posicionamiento Basado en la Variedad para los clientes que buscan una solución integral?",
+            options: [
+                "a) No implica ningún trade-off para ellos.",
+                "b) Pueden encontrar una solución parcial, pero deben buscar otros proveedores para otras necesidades.",
+                "c) Se les ofrece el mejor precio del mercado.",
+                "d) Siempre obtienen el producto con la calidad más alta."
+            ],
+            correctIndex: 1,
+            justification: "El trade-off del Posicionamiento Basado en la Variedad es que, si bien la empresa es excelente en la variedad elegida, no satisface todas las necesidades del cliente (ej. Jiffy Lube solo cambia aceite, no hace reparaciones)."
+        },
+        {
+            q: "El Posicionamiento Basado en la Necesidad requiere que la empresa ajuste sus actividades porque:",
+            options: [
+                "a) Las necesidades de ese segmento son complejas y requieren un Calce único.",
+                "b) La geografía de los clientes es difícil.",
+                "c) La variedad de productos es muy limitada.",
+                "d) Se necesitan muchos benchmarking continuos."
+            ],
+            correctIndex: 0,
+            justification: "Al buscar satisfacer la mayoría de las necesidades de un grupo específico, la empresa debe configurar sus actividades de manera única para ese segmento."
+        },
+        {
+            q: "¿Qué ocurre si una empresa intenta cambiar de un Posicionamiento Basado en la Variedad a uno Basado en la Necesidad sin realizar trade-offs?",
+            options: [
+                "a) Logrará una ventaja competitiva de Tercer Orden.",
+                "b) Su Calce de actividades se simplificará.",
+                "c) Diluirá su posición y perderá su ventaja inicial.",
+                "d) Su Eficacia Operacional mejorará automáticamente."
+            ],
+            correctIndex: 2,
+            justification: "Los sistemas de actividades para los diferentes tipos de posicionamiento son incompatibles, y la empresa debe elegir, pues intentar hacer ambos diluye la posición y debilita el Calce."
+        },
+        {
+            q: "¿Cuál es el factor determinante en el Posicionamiento Basado en el Acceso?",
+            options: [
+                "a) Las diferencias en la cadena de valor necesaria para alcanzar al cliente.",
+                "b) Las diferencias en las características demográficas del cliente.",
+                "c) Las diferencias en la preferencia de color del producto.",
+                "d) Las diferencias en la tecnología utilizada por el cliente."
+            ],
+            correctIndex: 0,
+            justification: "El acceso se define por cómo se llega al cliente y la cadena de valor (logística, distribución) que esto implica."
+        },
+        {
+            q: "En el contexto de Posicionamiento, ¿qué son los 'clientes rurales' en comparación con 'clientes urbanos'?",
+            options: [
+                "a) Un ejemplo de trade-off de Segundo Orden.",
+                "b) Una segmentación basada en la Variedad.",
+                "c) Una diferencia de Acceso que exige una configuración de actividades distinta.",
+                "d) Un factor de Eficacia Operacional."
+            ],
+            correctIndex: 2,
+            justification: "La ubicación geográfica diferente (rural vs. urbano) es un ejemplo clásico de diferencia de Acceso, ya que la logística y el marketing deben configurarse de manera diferente."
+        },
+        {
+            q: "La elección de un Posicionamiento Estratégico es, fundamentalmente, la elección de:",
+            options: [
+                "a) Una tecnología superior.",
+                "b) Un conjunto de trade-offs mutuamente excluyentes.",
+                "c) Un solo producto para dominar el mercado.",
+                "d) Eliminar la necesidad de la EO."
+            ],
+            correctIndex: 1,
+            justification: "La estrategia consiste en tomar una posición única que inherentemente exige sacrificar otros posicionamientos u objetivos (los trade-offs)."
+        },
+
+        // CICLO 3: TRADE-OFFS Y SOSTENIBILIDAD DE LA VENTAJA - Q31-45
+        {
+            q: "¿Por qué son los trade-offs (transacciones) el concepto central de la Estrategia?",
+            options: [
+                "a) Porque obligan a la empresa a ser flexible.",
+                "b) Porque crean las diferencias que protegen la ventaja de la imitación.",
+                "c) Porque permiten a la empresa reducir costos de forma continua.",
+                "d) Porque son un subproducto de la Eficacia Operacional."
+            ],
+            correctIndex: 1,
+            justification: "Los trade-offs obligan a una empresa a elegir un camino, haciendo que las posiciones alternativas sean incompatibles. Esto disuade a los rivales de copiar la posición estratégica."
+        },
+        {
+            q: "¿Cuál es un ejemplo de trade-off que surge por la inconsistencia en la imagen o reputación?",
+            options: [
+                "a) Ser líder en costo y, al mismo tiempo, líder en alta personalización para clientes de lujo.",
+                "b) Vender un producto de baja calidad y alta calidad al mismo tiempo.",
+                "c) Usar la misma tecnología que los rivales.",
+                "d) Adoptar el benchmarking de forma continua."
+            ],
+            correctIndex: 0,
+            justification: "Es difícil (o se incurre en un costo enorme) mantener una imagen de exclusividad y, simultáneamente, una reputación de ser el proveedor más barato, ya que los clientes asocian las actividades."
+        },
+        {
+            q: "Según Porter, ¿qué consecuencia tiene intentar un re-posicionamiento o extensión sin hacer los trade-offs necesarios?",
+            options: [
+                "a) La ventaja competitiva se extiende a otros segmentos.",
+                "b) La empresa diluye su posición original y se estanca en la Eficacia Operacional.",
+                "c) Se logra un Calce de Tercer Orden.",
+                "d) Se reducen los costos fijos de la empresa."
+            ],
+            correctIndex: 1,
+            justification: "Al no hacer trade-offs, la empresa intenta tenerlo 'todo', lo que dispersa su enfoque, debilita su Calce de actividades y la empuja a la convergencia."
+        },
+        {
+            q: "Los trade-offs surgen cuando las actividades son inherentemente:",
+            options: [
+                "a) Flexibles.",
+                "b) Mutuamente excluyentes o incompatibles.",
+                "c) Complementarias.",
+                "d) Fáciles de imitar."
+            ],
+            correctIndex: 1,
+            justification: "Un trade-off es una elección donde la ganancia en un área (ej. bajo costo) significa sacrificar el desempeño en otra (ej. alta personalización)."
+        },
+        {
+            q: "La principal razón por la que una ventaja competitiva basada en la Estrategia es más sustentable que la basada en la EO es:",
+            options: [
+                "a) La EO solo puede reducir costos.",
+                "b) La Estrategia es más visible para los rivales.",
+                "c) La Estrategia se basa en una posición única protegida por trade-offs y un sistema de Calce.",
+                "d) La EO solo se aplica a los procesos internos."
+            ],
+            correctIndex: 2,
+            justification: "La sustentabilidad proviene de la dificultad de imitar el sistema de actividades (Calce) y de la necesidad de que el rival renuncie a su propia posición (Trade-offs) para copiar la tuya."
+        },
+        {
+            q: "Una de las tres fuentes de trade-offs mencionadas en la literatura de Porter es:",
+            options: [
+                "a) Inconsistencias de la tecnología (ej. usar un sistema antiguo y uno nuevo).",
+                "b) Inconsistencias en las actividades (ej. tener un equipo de ventas enfocado en grandes cuentas y otro en pequeñas cuentas).",
+                "c) Inconsistencias en las ventas (ej. vender por internet y en tiendas físicas).",
+                "d) Inconsistencias en el Calce de Tercer Orden."
+            ],
+            correctIndex: 1,
+            justification: "La estructura de costos y la efectividad de las actividades a menudo son inconsistentes al intentar servir posiciones diferentes."
+        },
+        {
+            q: "¿Qué papel juega el Posicionamiento en la Sostenibilidad de la Ventaja?",
+            options: [
+                "a) El Posicionamiento es la meta, la EO es el camino.",
+                "b) Un posicionamiento único es la base para construir un sistema de actividades (Calce) que es inherentemente difícil de imitar.",
+                "c) El Posicionamiento debe ser tan flexible como sea posible.",
+                "d) El Posicionamiento es solo relevante para la estrategia Basada en la Variedad."
+            ],
+            correctIndex: 1,
+            justification: "El posicionamiento define qué hacer y qué no hacer, creando el marco para el sistema de actividades interconectadas (Calce), la fuente de la sustentabilidad."
+        },
+        {
+            q: "La sustentabilidad del Posicionamiento Basado en el Acceso se mantiene porque los rivales tendrían que:",
+            options: [
+                "a) Ofrecer una variedad diferente de productos.",
+                "b) Reconfigurar sus canales de distribución, logística y servicio de forma costosa.",
+                "c) Atender a las necesidades opuestas de los clientes.",
+                "d) Invertir más en benchmarking."
+            ],
+            correctIndex: 1,
+            justification: "La diferencia de Acceso se basa en una cadena de valor única (logística, distribución) que es costosa y requiere trade-offs para replicar."
+        },
+        {
+            q: "Un 'Posicionamiento Único' significa:",
+            options: [
+                "a) Ser la única empresa que realiza una determinada actividad.",
+                "b) Elegir un conjunto de actividades y trade-offs distintos a los de la competencia.",
+                "c) Tener el costo más bajo y la calidad más alta simultáneamente.",
+                "d) Invertir la mayor cantidad de dinero en I+D."
+            ],
+            correctIndex: 1,
+            justification: "La unicidad no viene de una actividad aislada, sino de la combinación, el Calce y las elecciones estratégicas (los trade-offs)."
+        },
+        {
+            q: "¿Cuál es el peligro de enfocarse demasiado en el crecimiento a expensas de la Estrategia?",
+            options: [
+                "a) La empresa invierte demasiado en I+D.",
+                "b) La empresa diluye su Posicionamiento Único al intentar capturar nuevos clientes sin hacer trade-offs claros.",
+                "c) La Eficacia Operacional disminuye.",
+                "d) Los trade-offs se vuelven demasiado rígidos."
+            ],
+            correctIndex: 1,
+            justification: "El crecimiento a menudo lleva a la empresa a intentar servir a segmentos (Necesidad) o acceder a clientes (Acceso) que están fuera de su posición actual, lo que debilita el Calce y la Estrategia."
+        },
+        {
+            q: "¿Qué debe comunicar un líder estratégico sobre los trade-offs?",
+            options: [
+                "a) Que son una debilidad temporal de la empresa.",
+                "b) Que son necesarios y deben ser aceptados para proteger el Posicionamiento.",
+                "c) Que solo son relevantes para la gestión de costos.",
+                "d) Que deben ser eliminados a través de la Eficacia Operacional."
+            ],
+            correctIndex: 1,
+            justification: "El liderazgo debe defender la Estrategia y sus trade-offs para evitar la deriva y la convergencia."
+        },
+        {
+            q: "La visión alternativa de la ventaja competitiva sustentable de Porter se opone a la idea de que la ventaja proviene de:",
+            options: [
+                "a) Un sistema de actividades interconectadas.",
+                "b) El Calce de Tercer Orden.",
+                "c) La flexibilidad y la capacidad de responder a todo.",
+                "d) Un Posicionamiento Único."
+            ],
+            correctIndex: 2,
+            justification: "La visión de Porter se basa en la elección (elecciones claras implican rigidez), no en la flexibilidad universal."
+        },
+        {
+            q: "¿Cómo se define un trade-off?",
+            options: [
+                "a) Como la reducción simultánea de costo y el aumento de diferenciación.",
+                "b) Como un intercambio inevitable donde una acción mejora una posición, pero debilita otra.",
+                "c) Como un enfoque en la calidad sin considerar el costo.",
+                "d) Como el proceso de benchmarking entre rivales."
+            ],
+            correctIndex: 1,
+            justification: "Un trade-off es la esencia del 'elegir qué no hacer' en la estrategia."
+        },
+        {
+            q: "El Posicionamiento basado en la Variedad genera un trade-off porque:",
+            options: [
+                "a) Requiere una reingeniería de procesos constante.",
+                "b) La empresa sacrifica la satisfacción de todas las necesidades del cliente por la excelencia en una variedad.",
+                "c) Aumenta la complejidad logística.",
+                "d) Elimina la necesidad de benchmarking."
+            ],
+            correctIndex: 1,
+            justification: "Al elegir ofrecer solo una variedad (ej. cambios de aceite), la empresa renuncia a satisfacer las necesidades de reparación de sus clientes."
+        },
+        {
+            q: "¿Qué hace que una posición estratégica sea difícil de atacar por parte de un rival que ya tiene una posición establecida?",
+            options: [
+                "a) El costo de la EO del rival es demasiado alto.",
+                "b) El ataque obliga al rival a abandonar su propia posición por los trade-offs involucrados.",
+                "c) La empresa que ataca no tiene un Calce de Primer Orden.",
+                "d) La empresa atacada tiene una mejor tecnología."
+            ],
+            correctIndex: 1,
+            justification: "El costo estratégico de cambiar de posición (el trade-off) es la barrera de entrada más poderosa."
+        },
+
+        // CICLO 4: EL CALCE DE ACTIVIDADES (Primer, Segundo y Tercer Orden) - Q46-60
+        {
+            q: "¿Qué es el 'Calce' (Fit) de actividades en la Estrategia?",
+            options: [
+                "a) Es la capacidad de la empresa para adaptarse a cualquier cambio del mercado.",
+                "b) Es cómo las actividades de la empresa se refuerzan y complementan entre sí, multiplicando la ventaja.",
+                "c) Es el proceso de lograr la mejor práctica en cada actividad individual.",
+                "d) Es la correcta alineación entre la estructura de la empresa y su liderazgo."
+            ],
+            correctIndex: 1,
+            justification: "El Calce es la interconexión de las actividades, donde la efectividad de una aumenta el valor o reduce el costo de otra."
+        },
+        {
+            q: "La sustentabilidad de la ventaja competitiva, según Porter, radica principalmente en:",
+            options: [
+                "a) El descubrimiento de una única actividad clave y su protección.",
+                "b) La dificultad que tienen los rivales para copiar la compleja red de actividades interconectadas (Calce).",
+                "c) La inversión masiva en publicidad.",
+                "d) Los trade-offs de Primer Orden."
+            ],
+            correctIndex: 1,
+            justification: "Es mucho más difícil copiar un sistema de Calce que una sola actividad o un solo trade-off."
+        },
+        {
+            q: "El Primer Orden del Calce (Fit) se enfoca en:",
+            options: [
+                "a) La consistencia simple entre cada actividad y la estrategia general.",
+                "b) La optimización del sistema para eliminar actividades innecesarias.",
+                "c) El refuerzo mutuo de las actividades.",
+                "d) La reducción de costos operativos."
+            ],
+            correctIndex: 0,
+            justification: "El Primer Orden es la alineación básica: las actividades no deben contradecir ni debilitar la posición estratégica elegida."
+        },
+        {
+            q: "El Segundo Orden del Calce (Fit) se caracteriza por:",
+            options: [
+                "a) Eliminar la necesidad de una actividad mediante la elección de otra.",
+                "b) Actividades que se refuerzan mutuamente para lograr un resultado superior.",
+                "c) La consistencia de la imagen y la reputación.",
+                "d) La eficiencia logística."
+            ],
+            correctIndex: 1,
+            justification: "El Segundo Orden implica que una actividad facilita o mejora el desempeño de otra (ej. buen servicio reduce la necesidad de un equipo de ventas grande)."
+        },
+        {
+            q: "El Tercer Orden del Calce (Fit) se enfoca en la optimización del sistema, lo que implica:",
+            options: [
+                "a) Reducir la velocidad de respuesta.",
+                "b) Eliminar la necesidad de una actividad mediante la elección de otra.",
+                "c) Lograr la mejor práctica en cada actividad.",
+                "d) Aumentar la variedad de productos ofrecidos."
+            ],
+            correctIndex: 1,
+            justification: "El Tercer Orden busca la optimización profunda. El ejemplo de Gap y su reposición ilustra cómo una decisión logística (reposición rápida) elimina la necesidad de grandes inventarios."
+        },
+        {
+            q: "¿Cómo aumenta el Calce la solidez de una posición estratégica?",
+            options: [
+                "a) Haciéndola más flexible y adaptable.",
+                "b) Multiplicando el valor de una actividad por la forma en que interactúa con las demás.",
+                "c) Reduciendo los trade-offs necesarios.",
+                "d) Aumentando la inversión en I+D."
+            ],
+            correctIndex: 1,
+            justification: "El Calce no es la suma de las partes, sino su producto. La sinergia hace que la ventaja sea mayor y más difícil de desentrañar para los rivales."
+        },
+        {
+            q: "Si una empresa de bajo costo (estrategia única) implementa una actividad que eleva innecesariamente la calidad más allá de lo necesario para el segmento, ¿qué orden de Calce está violando?",
+            options: [
+                "a) Tercer Orden.",
+                "b) Segundo Orden.",
+                "c) Primer Orden.",
+                "d) No viola ningún orden."
+            ],
+            correctIndex: 2,
+            justification: "Está violando la consistencia básica (Primer Orden) entre la actividad y la estrategia general de bajo costo."
+        },
+        {
+            q: "Una empresa que invierte en capacitación excepcional para su personal de servicio al cliente y, como resultado, necesita menos marketing y publicidad debido al boca a boca positivo, demuestra un Calce de:",
+            options: [
+                "a) Primer Orden (Consistencia).",
+                "b) Segundo Orden (Refuerzo mutuo).",
+                "c) Tercer Orden (Optimización/Eliminación).",
+                "d) Orden Cero."
+            ],
+            correctIndex: 1,
+            justification: "El buen servicio (Actividad A) refuerza la reputación y reduce la necesidad de publicidad (Actividad B), un ejemplo de refuerzo mutuo."
+        },
+        {
+            q: "En el ejemplo de Gap y su reposición rápida, la decisión elimina la necesidad de grandes almacenes. Esto es un ejemplo de:",
+            options: [
+                "a) Trade-off de Primer Orden.",
+                "b) Calce de Segundo Orden.",
+                "c) Calce de Tercer Orden (Optimización del sistema).",
+                "d) Eficacia Operacional."
+            ],
+            correctIndex: 2,
+            justification: "La reposición rápida (una elección) optimiza el sistema al eliminar la necesidad de otra actividad costosa (almacenamiento de inventario)."
+        },
+        {
+            q: "La principal dificultad para los rivales que intentan copiar una estrategia con un Calce de alto orden es:",
+            options: [
+                "a) No pueden imitar las tecnologías individuales.",
+                "b) No pueden identificar las relaciones de causa y efecto entre el vasto número de actividades interconectadas.",
+                "c) El costo de las materias primas es demasiado alto.",
+                "d) El benchmarking no es posible."
+            ],
+            correctIndex: 1,
+            justification: "La complejidad de la red de interacciones (Calce) es ininteligible para el rival, lo que hace que la imitación sea un proceso de prueba y error."
+        },
+        {
+            q: "¿Cuál es el beneficio que un Calce superior brinda a los costos de la empresa?",
+            options: [
+                "a) Solo aumenta la diferenciación del producto.",
+                "b) Reduce los costos operativos al eliminar redundancias e ineficiencias del sistema.",
+                "c) Obliga a la empresa a subir los precios.",
+                "d) Permite a la empresa ser flexible."
+            ],
+            correctIndex: 1,
+            justification: "Un sistema de Calce bien diseñado elimina el desperdicio y la necesidad de ciertas actividades, lo que reduce estructuralmente los costos (eficiencia del sistema)."
+        },
+        {
+            q: "El concepto de Calce subraya que la Ventaja Competitiva es el resultado de:",
+            options: [
+                "a) Una actividad aislada que se realiza excepcionalmente bien.",
+                "b) El sistema de actividades en su conjunto, diseñado para una posición estratégica única.",
+                "c) La inversión en I+D.",
+                "d) La adopción de benchmarking."
+            ],
+            correctIndex: 1,
+            justification: "El todo es más que la suma de sus partes. El diseño de la red completa de actividades es la fuente de la sustentabilidad."
+        },
+        {
+            q: "¿Qué tipo de Calce asegura que las elecciones estratégicas se reflejen lógicamente en todas las actividades operacionales?",
+            options: [
+                "a) Tercer Orden.",
+                "b) Segundo Orden.",
+                "c) Primer Orden.",
+                "d) Todos los anteriores."
+            ],
+            correctIndex: 2,
+            justification: "El Primer Orden es la consistencia básica entre las actividades y la estrategia general (la lógica básica de la estrategia)."
+        },
+        {
+            q: "Si una empresa logra un Calce perfecto, ¿significa que nunca necesitará mejorar su Eficacia Operacional (EO)?",
+            options: [
+                "a) Sí, la EO ya no es necesaria.",
+                "b) No, la EO sigue siendo una condición necesaria para que el Calce sea efectivo.",
+                "c) Sí, el Calce de Tercer Orden la elimina.",
+                "d) No, solo para el Posicionamiento basado en la Variedad."
+            ],
+            correctIndex: 1,
+            justification: "El Calce se basa en actividades. Si las actividades son ineficientes (mala EO), la ventaja del Calce se desperdicia. La EO siempre es necesaria."
+        },
+        {
+            q: "El Calce es la barrera de imitación más difícil porque:",
+            options: [
+                "a) Requiere que el rival copie miles de interconexiones en lugar de una sola.",
+                "b) El costo de las materias primas es inaccesible.",
+                "c) La tecnología es secreta.",
+                "d) Los trade-offs son demasiado ambiguos."
+            ],
+            correctIndex: 0,
+            justification: "La imitación de un sistema de Calce es exponencialmente más difícil que la imitación de una práctica aislada."
+        },
+
+        // CICLO 5: SÍNTESIS Y LIDERAZGO - Q61-75 (Repaso y Consolidación)
+        {
+            q: "El principal desafío que enfrenta la Estrategia a largo plazo, una vez establecida, proviene de:",
+            options: [
+                "a) La tecnología disruptiva.",
+                "b) Los cambios incrementales y la presión para ser 'todo para todos', debilitando el Calce y los trade-offs.",
+                "c) Los ataques directos de los rivales con Posicionamiento Basado en el Acceso.",
+                "d) El bajo costo de la mano de obra."
+            ],
+            correctIndex: 1,
+            justification: "El riesgo más común es el estrangulamiento gradual debido a la presión de los ejecutivos y clientes para adoptar nuevas actividades sin hacer los trade-offs correspondientes."
+        },
+        {
+            q: "¿Qué actividad es menos probable que sea dictada por un Posicionamiento basado en el Acceso?",
+            options: [
+                "a) La estrategia de distribución y logística.",
+                "b) El tamaño de la fuerza de ventas y su ubicación.",
+                "c) La variedad de productos y servicios ofrecidos.",
+                "d) Los sistemas de pedidos y procesamiento."
+            ],
+            correctIndex: 2,
+            justification: "El Acceso dicta el cómo se llega al cliente (logística, servicio), no el qué se le vende (variedad)."
+        },
+        {
+            q: "Una empresa de Posicionamiento basado en la Necesidad (ej. Bessemer Trust) fracasaría si intentara:",
+            options: [
+                "a) Aumentar la calidad de su servicio.",
+                "b) Realizar benchmarking en sus procesos internos.",
+                "c) Servir a un segmento opuesto de clientes (ej. clientes pequeños con pocas necesidades) sin cambiar drásticamente su sistema de actividades.",
+                "d) Fortalecer su Calce de Segundo Orden."
+            ],
+            correctIndex: 2,
+            justification: "El sistema de actividades de Posicionamiento basado en la Necesidad está tan finamente adaptado al segmento elegido que sería incompatible servir a un segmento opuesto."
+        },
+        {
+            q: "¿Cuál es una de las tareas más cruciales del liderazgo en el contexto estratégico?",
+            options: [
+                "a) Asegurar que la EO de la empresa sea superior a la de los rivales.",
+                "b) Ser el portavoz de la Estrategia y comunicar los trade-offs y las elecciones a toda la organización.",
+                "c) Maximizar el crecimiento de la cuota de mercado.",
+                "d) Invertir en una nueva tecnología cada trimestre."
+            ],
+            correctIndex: 1,
+            justification: "El líder debe defender la Estrategia y sus trade-offs para evitar la deriva y la convergencia."
+        },
+        {
+            q: "¿Qué tipo de Posicionamiento puede a menudo ser imitado por un rival a través de un simple re-etiquetado o publicidad?",
+            options: [
+                "a) Posicionamiento basado en un Calce de Tercer Orden.",
+                "b) Posicionamiento basado únicamente en una característica (ej. 'el más rápido') sin trade-offs ni Calce.",
+                "c) Posicionamiento basado en la Necesidad.",
+                "d) Posicionamiento basado en el Acceso."
+            ],
+            correctIndex: 1,
+            justification: "Si no hay trade-offs y un Calce complejo detrás de la afirmación, es solo una declaración que un rival puede copiar con publicidad."
+        },
+        {
+            q: "El término 'Calce' (Fit) significa que la estrategia debe verse como:",
+            options: [
+                "a) Un conjunto de actividades aisladas.",
+                "b) Un ejercicio de reducción de costos.",
+                "c) Un sistema interdependiente y mutuamente reforzado.",
+                "d) Un proceso de adaptación continua a los cambios externos."
+            ],
+            correctIndex: 2,
+            justification: "El Calce es la interconexión sistémica, el núcleo de la sustentabilidad de la ventaja."
+        },
+        {
+            q: "¿Qué acción estratégica es más vulnerable a la imitación de los rivales?",
+            options: [
+                "a) La elección de trade-offs únicos y complejos.",
+                "b) La implementación de un Calce de Tercer Orden.",
+                "c) La adopción de la mejor práctica actual de la industria (EO).",
+                "d) La elección de un Posicionamiento Basado en la Necesidad."
+            ],
+            correctIndex: 2,
+            justification: "La Eficacia Operacional (que incluye adoptar las mejores prácticas o benchmarking) es el tipo de ventaja más fácil de imitar, lo que conduce a la convergencia."
+        },
+        {
+            q: "El error más común que comete una empresa que está en una buena posición estratégica es:",
+            options: [
+                "a) No invertir suficiente en benchmarking.",
+                "b) Exceder su posición al intentar responder a cada nueva necesidad del cliente o a cada ataque del rival.",
+                "c) Enfocarse demasiado en los trade-offs.",
+                "d) Tener un Calce de Primer Orden."
+            ],
+            correctIndex: 1,
+            justification: "La 'extensión' (intentar ser más amplio sin cambiar el sistema) diluye la estrategia existente y es el camino más rápido hacia la convergencia."
+        },
+        {
+            q: "La competencia destructiva o de 'carrera hacia el fondo' es el resultado de:",
+            options: [
+                "a) La falta de benchmarking.",
+                "b) La obsesión por el Posicionamiento.",
+                "c) La ausencia de trade-offs y posiciones únicas.",
+                "d) Un Calce de Primer Orden."
+            ],
+            correctIndex: 2,
+            justification: "Si no hay trade-offs ni posiciones únicas, las empresas son indistinguibles y solo pueden competir en precio."
+        },
+        {
+            q: "¿Qué acción estratégica es más vulnerable a la imitación de los rivales?",
+            options: [
+                "a) La elección de trade-offs únicos y complejos.",
+                "b) La implementación de un Calce de Tercer Orden.",
+                "c) La adopción de la mejor práctica actual de la industria (EO).",
+                "d) La elección de un Posicionamiento Basado en la Necesidad."
+            ],
+            correctIndex: 2,
+            justification: "La Eficacia Operacional (que incluye adoptar las mejores prácticas o benchmarking) es el tipo de ventaja más fácil de imitar, lo que conduce a la convergencia."
+        },
+        {
+            q: "¿Qué acción estratégica es más vulnerable a la imitación de los rivales?",
+            options: [
+                "a) La elección de trade-offs únicos y complejos.",
+                "b) La implementación de un Calce de Tercer Orden.",
+                "c) La adopción de la mejor práctica actual de la industria (EO).",
+                "d) La elección de un Posicionamiento Basado en la Necesidad."
+            ],
+            correctIndex: 2,
+            justification: "La Eficacia Operacional (que incluye adoptar las mejores prácticas o benchmarking) es el tipo de ventaja más fácil de imitar, lo que conduce a la convergencia."
+        },
+        {
+            q: "Si un rival copia algunas de las actividades de una empresa con un Calce de Tercer Orden, pero no el sistema completo, el resultado más probable es:",
+            options: [
+                "a) Que el rival obtenga una ventaja competitiva instantánea.",
+                "b) Que el rival obtenga poco o ningún beneficio porque las actividades copiada no se 'calzan' con su propio sistema.",
+                "c) Que la empresa original pierda inmediatamente su ventaja.",
+                "d) Que ambas empresas logren un Calce de Segundo Orden."
+            ],
+            correctIndex: 1,
+            justification: "El valor de una actividad en un sistema de Calce depende de cómo se conecte con las demás. Copiarla de forma aislada no genera ventaja."
+        },
+        {
+            q: "¿Qué elemento es el más difícil de imitar por un rival que está en el mismo mercado?",
+            options: [
+                "a) Una máquina nueva.",
+                "b) El sistema de Calce de Tercer Orden de una empresa.",
+                "c) Un nuevo logo o eslogan.",
+                "d) El benchmarking de costos."
+            ],
+            correctIndex: 1,
+            justification: "El Calce de Tercer Orden (optimización profunda y eliminación de actividades) es el más complejo y sistémico de los tres, y por lo tanto, el más difícil de copiar."
+        },
+        {
+            q: "La estrategia NO es un ejercicio de (síntesis final):",
+            options: [
+                "a) Definición de una posición única.",
+                "b) Lograr flexibilidad total.",
+                "c) Creación de trade-offs.",
+                "d) Integración de actividades."
+            ],
+            correctIndex: 1,
+            justification: "La estrategia es la elección, y la elección implica renuncia o rigidez. La flexibilidad total es incompatible con la existencia de trade-offs."
+        },
+        {
+            q: "El Liderazgo Estratégico implica constantemente decir 'no' a:",
+            options: [
+                "a) Las mejoras en la Eficacia Operacional.",
+                "b) Los trade-offs de Tercer Orden.",
+                "c) Las oportunidades que, aunque prometedoras, son inconsistentes con el posicionamiento.",
+                "d) La inversión en el Calce de Primer Orden."
+            ],
+            correctIndex: 2,
+            justification: "El líder debe defender la estrategia, lo que significa rechazar oportunidades o peticiones de clientes que debilitarían la posición única y el Calce del sistema."
+        }
+    ];
+
+    // Función de inicialización
+    function initQuiz() {
+        // Inicializa los datos del quiz con todas las preguntas
+        quizData = [...allQuestions];
+        // Establecer el índice de la primera pregunta para el primer ciclo (0 a 14)
+        currentQuestionIndex = 0;
+        // Iniciar la primera tarjeta
+        showCard(currentQuestionIndex);
+    }
+
+    // Función para mostrar una tarjeta
+    function showCard(index) {
+        if (index >= quizData.length) {
+            document.getElementById('question-text').textContent = "¡Cuestionario Completado!";
+            document.getElementById('options-container').innerHTML = "<p class='text-center text-xl text-gray-600 mt-10'>Has revisado las 75 preguntas. Para un aprendizaje óptimo, revisa este cuestionario nuevamente en un par de días.</p>";
+            document.getElementById('show-answer-btn').style.display = 'none';
+            document.getElementById('progress-display').textContent = "Progreso: 75/75";
+            document.getElementById('feedback-message').textContent = "";
+            document.getElementById('flashcard').classList.remove('flipped');
+            return;
+        }
+
+        const question = quizData[index];
+        const card = document.getElementById('flashcard');
+
+        // Resetear la tarjeta
+        card.classList.remove('flipped');
+        document.getElementById('question-text').textContent = question.q;
+        document.getElementById('feedback-message').textContent = "";
+        document.getElementById('show-answer-btn').disabled = true;
+        document.getElementById('show-answer-btn').classList.remove('bg-green-500', 'bg-red-500', 'hover:bg-green-600', 'hover:bg-red-600');
+        document.getElementById('show-answer-btn').classList.add('bg-gray-400');
+        document.getElementById('next-card-btn').style.display = 'none';
+        selectedOption = null;
+
+        // Mostrar opciones
+        const optionsContainer = document.getElementById('options-container');
+        optionsContainer.innerHTML = '';
+        question.options.forEach((option, i) => {
+            const button = document.createElement('button');
+            button.className = 'btn-option w-full text-left p-3 rounded-lg border border-gray-200 bg-white text-gray-800 font-medium hover:bg-blue-50 hover:border-blue-300 transition duration-150';
+            button.textContent = option;
+            button.setAttribute('data-index', i);
+            button.onclick = () => selectOption(button, i);
+            optionsContainer.appendChild(button);
+        });
+
+        // Actualizar contadores
+        const currentQNum = index + 1;
+        document.getElementById('progress-display').textContent = `Progreso: ${currentQNum}/${totalQuestions}`;
+
+        const cycle = Math.floor(index / questionsPerCycle) + 1;
+        let cycleText = `Ciclo ${cycle}`;
+        if (cycle === 1) cycleText += ': Fundamentos';
+        else if (cycle === 2) cycleText += ': Posicionamiento';
+        else if (cycle === 3) cycleText += ': Trade-offs y Sostenibilidad';
+        else if (cycle === 4) cycleText += ': Calce de Actividades';
+        else if (cycle === 5) cycleText += ': Síntesis y Liderazgo';
+        document.getElementById('cycle-display').textContent = cycleText;
+    }
+
+    // Función para seleccionar una opción
+    function selectOption(button, index) {
+        selectedOption = index;
+        const buttons = document.querySelectorAll('.btn-option');
+        buttons.forEach(btn => {
+            btn.classList.remove('bg-blue-200', 'border-blue-500');
+        });
+        button.classList.add('bg-blue-200', 'border-blue-500');
+
+        document.getElementById('show-answer-btn').disabled = false;
+        document.getElementById('show-answer-btn').classList.remove('bg-gray-400');
+        document.getElementById('show-answer-btn').classList.add('bg-secondary', 'hover:bg-blue-700');
+    }
+
+    // Función para comprobar la respuesta
+    function checkAnswer() {
+        if (selectedOption === null) return;
+
+        const question = quizData[currentQuestionIndex];
+        const correctIndex = question.correctIndex;
+        const isCorrect = selectedOption === correctIndex;
+
+        // Deshabilitar todas las opciones y mostrar colores
+        const buttons = document.querySelectorAll('.btn-option');
+        buttons.forEach((btn, i) => {
+            btn.disabled = true;
+            if (i === correctIndex) {
+                btn.classList.add('correct');
+            } else if (i === selectedOption) {
+                btn.classList.add('incorrect');
+            }
+        });
+
+        // Mostrar feedback en el front
+        const feedbackMsg = document.getElementById('feedback-message');
+        const checkBtn = document.getElementById('show-answer-btn');
+
+        if (isCorrect) {
+            feedbackMsg.innerHTML = '<span class="text-green-600">¡Correcto!</span>';
+            checkBtn.classList.remove('bg-secondary', 'hover:bg-blue-700', 'bg-gray-400');
+            checkBtn.classList.add('bg-success');
+        } else {
+            feedbackMsg.innerHTML = '<span class="text-red-600">Incorrecto.</span>';
+            checkBtn.classList.remove('bg-secondary', 'hover:bg-blue-700', 'bg-gray-400');
+            checkBtn.classList.add('bg-error');
+        }
+
+        checkBtn.disabled = true;
+        checkBtn.textContent = isCorrect ? '¡Correcto!' : 'Ver Respuesta';
+
+        // Llenar el reverso de la tarjeta y voltear
+        document.getElementById('correct-answer-display').textContent = question.options[correctIndex];
+        document.getElementById('justification-display').textContent = question.justification;
+
+        setTimeout(() => {
+            document.getElementById('flashcard').classList.add('flipped');
+            document.getElementById('next-card-btn').style.display = 'block';
+            document.getElementById('show-answer-btn').style.display = 'none';
+        }, 800);
+    }
+
+    // Función para pasar a la siguiente tarjeta
+    function nextCard() {
+        currentQuestionIndex++;
+        
+        // Resetear botón de comprobar
+        const checkBtn = document.getElementById('show-answer-btn');
+        checkBtn.textContent = 'Comprobar Respuesta';
+        checkBtn.classList.remove('bg-success', 'bg-error', 'bg-gray-400');
+        checkBtn.classList.add('bg-secondary', 'hover:bg-blue-700');
+        checkBtn.style.display = 'block';
+
+        showCard(currentQuestionIndex);
+    }
+
+    // Iniciar la aplicación al cargar la ventana
+    window.onload = initQuiz;
+</script>
+
+</body>
+</html>
